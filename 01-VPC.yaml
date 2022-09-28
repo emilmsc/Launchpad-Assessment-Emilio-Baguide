@@ -1,0 +1,344 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Name Prod / Test / Dev"
+        Parameters:
+          - EnvironmentName
+      - Label:
+          default: "VPC IPs"
+        Parameters:
+          - VPCCIDR
+      - Label:
+          default: "Public subnet CIDR"
+        Parameters:
+          - SubnetPublic1CIDR
+          - SubnetPublic2CIDR
+      - Label:
+          default: "Application subnet CIDR"
+        Parameters:
+          - SubnetApp1CIDR
+          - SubnetApp2CIDR
+      - Label:
+          default: "Data subnet CIDR"
+        Parameters:
+          - SubnetData1CIDR
+          - SubnetData2CIDR
+Description:
+  Template for VPC Creation with two subnets, NAT and Internet gateways.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that is prefixed as BU1ect name.
+    Type: String
+    MaxLength: 256
+    Default: TestEnv
+  VPCCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetPublic1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public1 subnet.
+    Type: String
+    Default: 10.0.0.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetPublic2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public2 subnet.
+    Type: String
+    Default: 10.0.1.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetApp1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the aplication1 subnet.
+    Type: String
+    Default: 10.0.2.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetApp2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the aplication2 subnet.
+    Type: String
+    Default: 10.0.3.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetData1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the data1 subnet.
+    Type: String
+    Default: 10.0.4.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  SubnetData2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the data2 subnet.
+    Type: String
+    Default: 10.0.5.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+
+Resources:
+# VPC and Internet Gateway
+  BU1VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "",[!Ref "EnvironmentName","-VPC"] ]
+
+  InternetGatewayforBU1VPC:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ "",[!Ref "EnvironmentName","-IG"] ]
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGatewayforBU1VPC
+      VpcId: !Ref BU1VPC
+
+# Subnets
+  SubnetPublic1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      VpcId: !Ref BU1VPC
+      CidrBlock: !Ref SubnetPublic1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Public-",!Select [ 0, !GetAZs  '' ] ] ]
+
+  SubnetPublic2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      VpcId: !Ref BU1VPC
+      CidrBlock: !Ref SubnetPublic2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Public-",!Select [ 1, !GetAZs  '' ] ] ]
+
+  SubnetApp1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      VpcId: !Ref BU1VPC
+      CidrBlock: !Ref SubnetApp1CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "App-",!Select [ 0, !GetAZs  '' ] ] ]
+
+  SubnetApp2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      VpcId: !Ref BU1VPC
+      CidrBlock: !Ref SubnetApp2CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "App-",!Select [ 1, !GetAZs  '' ] ] ]
+
+# Route table public, assiociate subnet and create route
+  RouteTablePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref BU1VPC
+      Tags:
+        - Key: Name
+          Value: public-rt
+
+  RouteTablePublic1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref SubnetPublic1
+  RouteTablePublic2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      SubnetId: !Ref SubnetPublic2
+
+  RoutePublicDefault:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayforBU1VPC
+
+#Nat Gateway and Elastic IP
+  NatGateway1ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+ # NAT GW must be per subnet for HA
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1ElasticIP.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref SubnetPublic1
+      Tags:
+      - Key: Name
+        Value: !Join [ "",[!Ref "EnvironmentName","-NATGW1"] ]
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2ElasticIP.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref SubnetPublic2
+      Tags:
+      - Key: Name
+        Value: !Join [ "",[!Ref "EnvironmentName","-NATGW2"] ]
+
+# Route table private, associate subnets and create route
+  RouteTablePrivate1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref BU1VPC
+      Tags:
+        - Key: Name
+          Value: private-rt-1a
+
+  RouteTablePrivate2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref BU1VPC
+      Tags:
+        - Key: Name
+          Value: private-rt-1b
+
+  AppSubnet1RouteTablePrivateAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate1
+      SubnetId: !Ref SubnetApp1
+
+  AppSubnet2RouteTablePrivateAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate2
+      SubnetId: !Ref SubnetApp2
+
+  RoutePriv1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  RoutePriv2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+# Store Parameters in System Manager Store
+  ParVPCId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "VPCStackName"
+      Type: String
+      Value:
+        Fn::Sub: '${AWS::StackName}'
+
+Outputs:
+  StackName:
+    Description: A name of the Stack
+    Value: !Ref AWS::StackName
+
+  VPC:
+    Description: VPC Id
+    Value: !Ref BU1VPC
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::VPCId'
+
+  PublicSubnet1Id:
+    Description: Public 1 subnet id
+    Value: !Ref SubnetPublic1
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::PublicSubnet1ID'
+
+  PublicSubnet2Id:
+    Description: Public 2 subnet id
+    Value: !Ref SubnetPublic2
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::PublicSubnet2ID'
+
+  AppSubnet1Id:
+    Description: App 1 subnet id
+    Value: !Ref SubnetApp1
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::AppSubnet1ID'
+
+  AppSubnet2Id:
+    Description: App 2 subnet id
+    Value: !Ref SubnetApp2
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::AppSubnet2ID'
+
+  PublicSubnet1CIDR:
+    Description: A list of the public subnets
+    Value: !Ref SubnetPublic1CIDR
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::PublicSubnet1CIDR'
+
+  PublicSubnet2CIDR:
+    Description: A list of the public subnets
+    Value: !Ref SubnetPublic2CIDR
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::PublicSubnet2CIDR'
+
+  PublicSubnetCIDRs:
+    Description: A list of the public subnets
+    Value:
+      Fn::Join: [ ";", [!Ref SubnetPublic1CIDR,!Ref SubnetPublic2CIDR]  ]
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::PublicSubnets'
+
+  AppSubnetCIDRs:
+    Description: A list of the app subnets
+    Value:
+      Fn::Join: [ ";", [!Ref SubnetApp1CIDR,!Ref SubnetApp2CIDR]  ]
+    Export:
+      Name:
+        Fn::Sub: '${AWS::StackName}::AppSubnets'
