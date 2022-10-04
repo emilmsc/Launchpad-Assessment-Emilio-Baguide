@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Business Unit 1 Stack Template
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Transit Gateway Parameter Settings'
+        Parameters:
+          - pMNGVPCID
+          - pMNGTransitGatewayMNGID
+          - pMNGRoute
+      - Label:
+          default: 'Resource Share Parameter Settings'
+        Parameters:
+          - pMNGTransitGatewayArns
+Parameters:
+  # Business Unit 1 Parameters
+  pMNGTransitGatewayArns:
+    Description: Hard code transit gateway ARN (FrontEnd)
+    Type: String
+    Default: arn:aws:ec2:us-east-1:708568616694:transit-gateway/tgw-06d817419f4dc2703
+  pMNGVPCIDImport:
+    Description: VPC ID from from the Business Unit 1 (FrontEnd)
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: MNGVPCID
+  pMNGSubnetApp1:
+    Description: Subnet ID from the Business Unit 1 Application Subnet (FrontEnd)
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: AppSubnet1SSMPar
+  pMNGSubnetApp2:
+    Description: Subnet ID from the Business Unit 1 Application Subnet (FrontEnd)
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: AppSubnet2SSMPar
+  pTransitGatewayID:
+    Description: Subnet ID from the Business Unit 1 Application Subnet (FrontEnd)
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: TransitGatewayID
+  pMNGVPCID:
+    Description: Subnet ID from the Business Unit 1 Application Subnet (FrontEnd)
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: MNGVPCID
+
+Resources:
+  # Share the transit gateway from the MNGVPC (MNGStack)
+  ResourceShareMNG:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      Name: TransitGatewayShare
+      ResourceArns:
+        - !Sub "${pMNGTransitGatewayArns}"
+      Principals:
+        - 287302967164
+        - 009271840324
+        - 488502725735
+        - 522653425719
+        - 708568616694
+
+  TGWAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref pMNGSubnetApp1
+        - !Ref pMNGSubnetApp2
+      TransitGatewayId: !Ref pTransitGatewayID
+      VpcId: !Ref pMNGVPCID
+      Tags:
+        - Key: Name
+          Value: !Ref pMNGVPCID
+Outputs:
+  oResourceShareMNG:
+    Description: Resource Share ARN
+    Value:
+      !GetAtt ResourceShareMNG.Arn

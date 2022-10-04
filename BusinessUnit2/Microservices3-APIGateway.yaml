@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Business Unit 4 Stack Template
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Business Unit"
+        Parameters:
+          - pBusinessUnit
+      - Label:
+          default: "Deployment Environment"
+        Parameters:
+          - pEnvironmentName
+Parameters:
+  pBusinessUnit:
+    Description: Identify the business unit that deploys this resource
+    Type: String
+    Default: BU2
+  pEnvironmentName:
+    Description: Defines the deployment environment
+    Type: String
+    MaxLength: 256
+    AllowedValues:
+      - Production
+      - Staging
+      - Development
+    Default: Development
+  APIName:
+    Type: String
+    Default: AppAPI
+
+  RoleName:
+    Type: String
+    Default: api-gateway-upload-to-s32
+
+  PolicyName:
+    Type: String
+    Default: S3UploadPolicy
+
+  StageName:
+    Type: String
+    Default: v1
+
+  S3BucketforPhotos:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /s3/photobucketARN
+    Description: S3 Bucket Name where Lambda Packages are stored
+
+Resources:
+  UploadToS3AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                      {
+                          "Sid": "",
+                          "Effect": "Allow",
+                          "Principal": {
+                              "Service": "apigateway.amazonaws.com"
+                          },
+                          "Action": "sts:AssumeRole"
+                      }
+                  ]
+              }
+      Description: Allow API GAteway to Upload in S3
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      RoleName: !Ref RoleName
+
+  S3UploadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument: {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Sid": "",
+                    "Effect": "Allow",
+                    "Action": "s3:PutObject",
+                    "Resource": ["Fn::Sub": "${S3BucketforPhotos}/*"]  #Need bucket arn
+                }
+            ]
+        }
+      ManagedPolicyName: !Ref PolicyName
+      Roles:
+        - !Ref UploadToS3AccessRole
+
+  Api:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      BinaryMediaTypes:
+        - '*/*'
+      Name: !Ref APIName
+      Description: API To Resize Image
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  folderResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt
+        - Api
+        - RootResourceId
+      PathPart: '{folder}'
+      RestApiId: !Ref Api
+
+  ObjectResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref folderResource
+      PathPart: '{object}'
+      RestApiId: !Ref Api
+
+  APIPostMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      RequestParameters:
+        method.request.path.folder: true
+        method.request.path.object: true
+      Integration:
+        Credentials: !GetAtt UploadToS3AccessRole.Arn
+        IntegrationHttpMethod: PUT
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestParameters:
+          integration.request.path.bucket: method.request.path.folder
+          integration.request.path.key: method.request.path.object
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:s3:path/{bucket}/{key}'
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 200
+      ResourceId: !Ref ObjectResource
+      RestApiId: !Ref Api
+
+  Deployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: APIPostMethod
+    Properties:
+      RestApiId: !Ref Api
+      StageName: !Ref StageName
+
+# Store Parameters in System Manager Store
+  ParAPIIdExport:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/API/Id"
+      Type: String
+      Value: !Ref Api
+
+  ParAPIStage:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "/API/StageName"
+      Type: String
+      Value: !Ref StageName

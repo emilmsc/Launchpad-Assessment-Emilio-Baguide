@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Metadata:
+  Description: "CloudWatch deployment"
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Import SNS Topis for alarm notifications - ASG Stack"
+        Parameters:
+          - AutoScaleStackToImport
+          - VPCStackNameToImport
+      - Label:
+          default: "Business Unit"
+        Parameters:
+          - pBusinessUnit
+      - Label:
+          default: "Deployment Environment"
+        Parameters:
+          - pEnvironmentName
+    ParameterLabels:
+      AutoScaleStackToImport:
+        default: "Autoscale Stack name"
+      VPCStackNameToImport:
+        default: "VPC Stack name"
+
+
+Parameters:
+  pBusinessUnit:
+    Description: Identify the business unit that deploys this resource
+    Type: String
+    Default: BU4
+  pEnvironmentName:
+    Description: Defines the deployment environment
+    Type: String
+    MaxLength: 256
+    AllowedValues:
+      - Production
+      - Staging
+      - Development
+    Default: Development
+
+  AutoScaleStackToImport:
+    Description: Name of an existing Autoscale stack.
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: ASGStackName
+  VPCStackNameToImport:
+    Description: Name of an existing stack from where we want to import VPCIs, Public subnet and CIDR
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: VPCStackName
+  TrafficType:
+    Description: The type of traffic to log.
+    Type: String
+    Default: REJECT
+    AllowedValues:
+    - ACCEPT
+    - REJECT
+    - ALL
+
+Resources:
+  RDSFreeStorageSpace:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-RDS-FreeStorageSpace"
+      AlarmDescription: "Alarm when storage space above "
+      AlarmActions:
+        - Fn::ImportValue:
+            !Sub "${AutoScaleStackToImport}::EmailNotifications"
+      Namespace: "AWS/RDS"
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: EngineName
+          Value: "mysql"
+      EvaluationPeriods: "2"
+      Period: "300"
+      Statistic: "Average"
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      Threshold: "5000000000"
+
+  RDSDatabaseConnection:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-RDS-DatabaseConnection"
+      AlarmDescription: "Alarm when number connections above 100"
+      AlarmActions:
+        - Fn::ImportValue:
+            !Sub "${AutoScaleStackToImport}::EmailNotifications"
+      Namespace: "AWS/RDS"
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: EngineName
+          Value: "mysql"
+      EvaluationPeriods: "2"
+      Period: "300"
+      Statistic: "Average"
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      Threshold: "100"
+
+  RDSFreeableMemory:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-RDS-FreeableMemory"
+      AlarmDescription: "Alarm when free memory lower than 100M"
+      AlarmActions:
+        - Fn::ImportValue:
+            !Sub "${AutoScaleStackToImport}::EmailNotifications"
+      Namespace: "AWS/RDS"
+      MetricName: FreeableMemory
+      Dimensions:
+        - Name: EngineName
+          Value: "mysql"
+      EvaluationPeriods: "2"
+      Period: "300"
+      Statistic: "Average"
+      ComparisonOperator: "LessThanOrEqualToThreshold"
+      Threshold: "100"
+
+  InsufficientMemory:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-InsufficientMemory"
+      AlarmDescription: "Alarm when free memory less or equal 20%"
+      AlarmActions:
+        - Fn::ImportValue:
+            !Sub "${AutoScaleStackToImport}::EmailNotifications"
+      Namespace: !Ref AWS::StackName
+      MetricName: mem_used_percent
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref AutoScaleStackToImport
+      EvaluationPeriods: "1"
+      Period: "60"
+      Statistic: "Average"
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      Threshold: "80"
+
+  FlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: 'vpc-flow-logs.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: VPCflowlogs-policy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+            - 'logs:DescribeLogGroups'
+            - 'logs:DescribeLogStreams'
+            Resource: !GetAtt LogGroup.Arn
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: "VPCFlowLogGroup"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: VPCFlowLogGroup
+
+  VPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt FlowLogsRole.Arn
+      LogGroupName: !Ref LogGroup
+      ResourceId: !ImportValue
+          Fn::Sub: ${VPCStackNameToImport}::VPCId
+      ResourceType: VPC
+      TrafficType: !Ref TrafficType

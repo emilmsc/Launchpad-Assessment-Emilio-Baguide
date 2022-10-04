@@ -1,0 +1,335 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Business Unit 4 Stack Template
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Business Unit"
+        Parameters:
+          - pBusinessUnit
+      - Label:
+          default: "Deployment Environment"
+        Parameters:
+          - pEnvironmentName
+      - Label:
+          default: "VPC CIDR Block"
+        Parameters:
+          - prMNGInternetGatewayAttachmentCIDR
+      - Label:
+          default: "Application subnet CIDR Block"
+        Parameters:
+          - pSubnetPublic1CIDR
+          - pSubnetPublic2CIDR
+      - Label:
+          default: "Data subnet CIDR Block"
+        Parameters:
+          - pSubnetPrivate1CIDR
+          - pSubnetPrivate2CIDR
+
+Parameters:
+  pBusinessUnit:
+    Description: Identify the business unit that deploys this resource
+    Type: String
+    Default: MNG
+  pEnvironmentName:
+    Description: Defines the deployment environment
+    Type: String
+    MaxLength: 256
+    AllowedValues:
+      - Production
+      - Staging
+      - Development
+    Default: Development
+  VPCMNGCIDR:
+    Description: Please enter the IP block (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  pSubnetPublic1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public1 subnet.
+    Type: String
+    Default: 10.0.1.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  pSubnetPublic2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public2 subnet.
+    Type: String
+    Default: 10.0.2.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  pSubnetPrivate1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Private1 subnet.
+    Type: String
+    Default: 10.0.3.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+  pSubnetPrivate2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Private2 subnet.
+    Type: String
+    Default: 10.0.4.0/24
+    MinLength: '9'
+    MaxLength: '18'
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "Must be a valid IP CIDR range of the form x.x.x.x/x."
+
+  # Transit gateway attachment Parameters
+  pAmazonAsn: # Amazon side BGP ASN
+    Type: String
+    Description: A private Autonomous System Number (ASN) for  BGP session.
+    Default: 65000
+    MinLength: 5
+    MaxLength: 10
+    ConstraintDescription: The range is 64512 to 65534 for 16-bit ASNs and 4200000000 to 4294967294 for 32-bit ASNs.
+
+  pAutoAcceptSharedAttachments: # enable/disable attachment requests
+    Type: String
+    Description: Indicates whether cross-account attachment requests are automatically accepted.
+    Default: "enable"
+    AllowedValues:
+      - "enable"
+      - "disable"
+
+  pDefaultRouteTableAssociation: # enable/disable automatic route table association
+    Type: String
+    Description: Enable or disable automatic association with the default association route table.
+    Default: "enable"
+    AllowedValues:
+      - "enable"
+      - "disable"
+
+  pDefaultRouteTablePropagation: # enable/disable automatic route propagation to the default route table
+    Type: String
+    Description: Enable or disable automatic propagation of routes to the default propagation route table.
+    Default: "enable"
+    AllowedValues:
+      - "enable"
+      - "disable"
+
+  pDnsSupport: # Enable or disable DNS support
+    Type: String
+    Description: Enable or disable DNS support.
+    Default: "enable"
+    AllowedValues:
+      - "enable"
+      - "disable"
+
+  pVpnEcmpSupport: # Enable or disable Equal Cost Multipath Protocol
+    Type: String
+    Description: Enable or disable Equal Cost Multipath Protocol.
+    Default: "disable"
+    AllowedValues:
+      - "enable"
+      - "disable"
+
+Resources:
+  VPCMNG:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCMNGCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Join [ "",[ !Ref "pBusinessUnit","-VPC" ] ]
+          
+  InternetGatewayVPCMNG:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join [ "",[!Ref "pEnvironmentName","-IG"] ]
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGatewayVPCMNG
+      VpcId: !Ref VPCMNG
+
+  SubnetPublic1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      VpcId: !Ref VPCMNG
+      CidrBlock: !Ref pSubnetPublic1CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Public-",!Select [ 0, !GetAZs  '' ] ] ]
+
+  SubnetPublic2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      VpcId: !Ref VPCMNG
+      CidrBlock: !Ref pSubnetPublic2CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Public-",!Select [ 1, !GetAZs  '' ] ] ]
+
+  SubnetPrivate1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      VpcId: !Ref VPCMNG
+      CidrBlock: !Ref pSubnetPrivate1CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Private-",!Select [ 0, !GetAZs  '' ] ] ]
+
+  SubnetPrivate2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      VpcId: !Ref VPCMNG
+      CidrBlock: !Ref pSubnetPrivate2CIDR
+      Tags:
+        - Key: Name
+          Value: !Join [ "", [ "Private-",!Select [ 1, !GetAZs  '' ] ] ]
+
+  TransitGateway:
+    Type: "AWS::EC2::TransitGateway"
+    Properties:
+      AmazonSideAsn: !Ref pAmazonAsn
+      AutoAcceptSharedAttachments: !Ref pAutoAcceptSharedAttachments
+      DefaultRouteTableAssociation: !Ref pDefaultRouteTableAssociation
+      DefaultRouteTablePropagation: !Ref pDefaultRouteTablePropagation
+      Description: "Transit Gateway serves as a centralized outgoing gateway for networking traffic"
+      DnsSupport: !Ref pDnsSupport
+      Tags:
+        - Key: Name
+          Value: 'My Transit Gateway'
+      VpnEcmpSupport: !Ref pVpnEcmpSupport
+
+#Nat Gateway and Elastic IP
+
+  NatGateway1ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+ # NAT GW must be per subnet for HA---------
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1ElasticIP.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref SubnetPublic1
+      Tags:
+      - Key: Name
+        Value: !Join [ "",[!Ref "pEnvironmentName","-NATGW1"] ]
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2ElasticIP.AllocationId
+      ConnectivityType: public
+      SubnetId: !Ref SubnetPublic2
+      Tags:
+      - Key: Name
+        Value: !Join [ "",[!Ref "pEnvironmentName","-NATGW2"] ]
+
+# Route table private, associate subnets and create route
+  RouteTablePrivate1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCMNG
+      Tags:
+        - Key: Name
+          Value: private-rt-1a
+
+  RouteTablePrivate2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCMNG
+      Tags:
+        - Key: Name
+          Value: private-rt-1b
+
+  AppSubnet1RouteTablePrivateAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate1
+      SubnetId: !Ref SubnetPrivate1
+
+  AppSubnet2RouteTablePrivateAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate2
+      SubnetId: !Ref SubnetPrivate2
+
+  RoutePriv1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  RoutePriv2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePrivate2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+# SSM exported Parameters
+  pStackName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "VPCStackName"
+      Type: String
+      Value:
+        Fn::Sub: '${AWS::StackName}'
+  pVPCID:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "MNGVPCID"
+      Type: String
+      Value: !Ref VPCMNG
+  pTransitGatewayID:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "TransitGatewayID"
+      Type: String
+      Value: !Ref TransitGateway
+
+  ParAppSubnet1Id:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "AppSubnet1SSMPar"
+      Type: String
+      Value: !Ref SubnetPrivate1
+
+  ParAppSubnet2Id:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "AppSubnet2SSMPar"
+      Type: String
+      Value: !Ref SubnetPrivate2
+
+Outputs:
+  StackName:
+    Description: A name of the Stack
+    Value: !Ref AWS::StackName
+
+  oTransitGatewayId: #Outputs the Transit Gateway ID
+    Description: The Transit Gateway ID
+    Value: !Ref TransitGateway
+
+
+
+
